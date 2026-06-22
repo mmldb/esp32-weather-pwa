@@ -240,8 +240,14 @@
     function updateChart() {
       const windowMs = range === "1h" ? 3600000 : range === "24h" ? 86400000 : 604800000;
       const cutoff = Date.now() - windowMs;
-      let points = history.filter(p => typeof p[mode] === "number" && (!p.ts || p.ts < 1000000000000 || p.ts >= cutoff));
-      if (points.length < 2) points = history.filter(p => typeof p[mode] === "number").slice(-120);
+      const validPoints = history.filter(p => typeof p[mode] === "number");
+      const realTimePoints = validPoints.filter(p => p.ts && p.ts >= 1000000000000);
+      let points = realTimePoints.length > 1
+        ? realTimePoints.filter(p => p.ts >= cutoff)
+        : validPoints.slice(-120);
+
+      if (points.length < 2 && realTimePoints.length > 1) points = realTimePoints.slice(-120);
+      if (points.length < 2) points = validPoints.slice(-120);
 
       if (range === "24h") points = averagePoints(points, 30 * 60 * 1000);
       if (range === "7d") points = averagePoints(points, 3 * 60 * 60 * 1000);
