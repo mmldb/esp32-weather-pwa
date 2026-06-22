@@ -33,24 +33,13 @@
     }
 
     .container { max-width: 560px; margin: 0 auto; }
-    .header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; border-bottom: 2px solid var(--border); padding-bottom: 14px; }
-    h1 { margin: 0; font-size: 1.4rem; font-weight: 400; text-transform: uppercase; }
-    .status { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; }
-    .status.alert { color: var(--red); }
-
     .card { background: var(--card); border: 1px solid var(--line); padding: 18px; margin-bottom: 16px; }
     .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; margin-bottom: 8px; }
-    .scanlines {
-      height: 54px;
-      margin-bottom: 18px;
-      background: repeating-linear-gradient(to bottom, transparent 0, transparent 10px, var(--text) 11px, var(--text) 13px);
-    }
 
     .main-row { display: flex; align-items: baseline; gap: 10px; }
     .main-num { font-size: clamp(4.8rem, 22vw, 7.2rem); line-height: 0.9; font-weight: 300; font-variant-numeric: tabular-nums; }
     .main-num.alert { color: var(--red); }
     .main-unit { font-size: 1.8rem; color: var(--muted); }
-    .time { color: var(--muted); margin-top: 14px; font-size: 1rem; }
 
     .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .stat { border-top: 1px solid var(--border); padding-top: 12px; }
@@ -79,19 +68,12 @@
 </head>
 <body>
   <div class="container">
-    <header class="header">
-      <h1>weather terminal</h1>
-      <span id="status" class="status">kapcsolodas...</span>
-    </header>
-
     <section class="card">
-      <div class="scanlines"></div>
       <div class="label">homerseklet</div>
       <div class="main-row">
         <div id="temp" class="main-num">--.-</div>
         <div class="main-unit">°C</div>
       </div>
-      <div id="time" class="time">xx:xx - adatok</div>
     </section>
 
     <section class="card stats">
@@ -185,11 +167,7 @@
       document.getElementById("temp").textContent = num(d.temperatureC, 1);
       document.getElementById("hum").textContent = num(d.humidityPct, 0).padStart(2, "0");
       document.getElementById("pressure").textContent = num(d.pressureHpa, 0);
-      document.getElementById("time").textContent = (d.timeText || "xx:xx") + " - adatok";
-
       const isAlert = danger(d);
-      document.getElementById("status").textContent = isAlert ? "alert" : "online";
-      document.getElementById("status").classList.toggle("alert", isAlert);
       document.getElementById("temp").classList.toggle("alert", d.temperatureC > 30 || d.temperatureC < 5);
       document.getElementById("hum").classList.toggle("alert", d.humidityPct > 70 || d.humidityPct < 30);
       document.getElementById("pressure").classList.toggle("alert", d.pressureHpa > 1035 || d.pressureHpa < 980);
@@ -202,8 +180,6 @@
         render(d);
         savePoint(d);
         updateChart();
-      }, () => {
-        document.getElementById("status").textContent = "offline";
       });
     }
 
