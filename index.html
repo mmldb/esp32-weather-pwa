@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#000000">
+    <title>ESP32 Weather</title>
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar" aria-label="Status">
+        <div>
+          <p class="label">ESP32 / BME280</p>
+          <h1>weather terminal</h1>
+        </div>
+        <div class="status" id="status">offline</div>
+      </header>
+
+      <section class="hero" aria-label="Current temperature">
+        <div class="scanlines" aria-hidden="true"></div>
+        <p class="label">last sample</p>
+        <div class="hero-row">
+          <div class="big-value" id="temperature">--.--</div>
+          <div class="big-unit">deg C</div>
+        </div>
+        <p class="timestamp" id="timestamp">xx:xx - adatok</p>
+      </section>
+
+      <section class="metrics" aria-label="Current measurements">
+        <article class="metric" id="humidityCard">
+          <p class="label">humidity</p>
+          <p><span id="humidity">--</span><span class="unit">%</span></p>
+        </article>
+        <article class="metric" id="pressureCard">
+          <p class="label">pressure</p>
+          <p><span id="pressure">----.--</span><span class="unit">hPa</span></p>
+        </article>
+        <article class="metric">
+          <p class="label">device</p>
+          <p class="small" id="device">esp32-bme280-01</p>
+        </article>
+      </section>
+
+      <section class="chart-panel" aria-label="History chart">
+        <div class="chart-head">
+          <p class="label">line</p>
+          <div class="segmented" aria-label="Chart metric">
+            <button class="active" data-series="temperatureC">temp</button>
+            <button data-series="humidityPct">hum</button>
+            <button data-series="pressureHpa">press</button>
+          </div>
+        </div>
+        <canvas id="chart" width="900" height="420"></canvas>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
