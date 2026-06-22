@@ -42,6 +42,8 @@
     .main-unit { font-size: 1.8rem; color: var(--muted); }
     .hint { color: var(--muted); margin-top: 8px; font-size: 0.9rem; }
     .hint.alert { color: var(--red); }
+    .temp-footer { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
+    .updated-inline { color: var(--muted); font-size: 0.74rem; text-align: right; white-space: nowrap; }
 
     .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .stat { border-top: 1px solid var(--border); padding-top: 12px; }
@@ -83,7 +85,10 @@
         <div id="temp" class="main-num">--.-</div>
         <div class="main-unit">&deg;C</div>
       </div>
-      <div id="tempHint" class="hint">--</div>
+      <div class="temp-footer">
+        <div id="tempHint" class="hint">--</div>
+        <div id="updated" class="updated-inline">--:--</div>
+      </div>
     </section>
 
     <section class="card stats">
@@ -101,12 +106,12 @@
 
     <section class="card meta">
       <div class="stat">
-        <div class="label">komfort</div>
-        <div><span id="comfort" class="stat-val">--</span><span class="unit">/100</span></div>
+        <div class="label">mai min</div>
+        <div><span id="todayMin" class="stat-val">--.-</span><span class="unit">&deg;C</span></div>
       </div>
       <div class="stat">
-        <div class="label">frissitve</div>
-        <div id="updated" class="stat-val">--:--</div>
+        <div class="label">mai max</div>
+        <div><span id="todayMax" class="stat-val">--.-</span><span class="unit">&deg;C</span></div>
       </div>
     </section>
 
@@ -181,13 +186,6 @@
       return "magas";
     }
 
-    function comfortScore(d) {
-      let score = 100;
-      score -= Math.min(45, Math.abs(d.temperatureC - 22) * 6);
-      score -= Math.min(35, Math.abs(d.humidityPct - 50) * 2);
-      return Math.max(0, Math.round(score));
-    }
-
     function num(v, n) {
       return typeof v === "number" ? v.toFixed(n) : "--";
     }
@@ -214,10 +212,6 @@
       localStorage.setItem(storageKey, JSON.stringify(history));
     }
 
-    function validTimestamp(value) {
-      return typeof value === "number" && value > 0 ? value : null;
-    }
-
     function loadFirebaseHistory(data) {
       if (!data) return;
 
@@ -234,6 +228,7 @@
         }));
 
       localStorage.setItem(storageKey, JSON.stringify(history));
+      updateTodayRangeDisplay();
       updateChart();
     }
 
@@ -305,6 +300,32 @@
       return "stabil";
     }
 
+    function todayTemperatureRange() {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const startTs = start.getTime();
+      const points = history.filter(p =>
+        p.ts &&
+        p.ts >= 1000000000000 &&
+        p.ts >= startTs &&
+        typeof p.temperatureC === "number"
+      );
+
+      if (!points.length) return { min: null, max: null };
+
+      const values = points.map(p => p.temperatureC);
+      return {
+        min: Math.min(...values),
+        max: Math.max(...values)
+      };
+    }
+
+    function updateTodayRangeDisplay() {
+      const today = todayTemperatureRange();
+      document.getElementById("todayMin").textContent = num(today.min, 1);
+      document.getElementById("todayMax").textContent = num(today.max, 1);
+    }
+
     function render(d) {
       document.getElementById("temp").textContent = num(d.temperatureC, 1);
       document.getElementById("hum").textContent = num(d.humidityPct, 0).padStart(2, "0");
@@ -312,15 +333,13 @@
       document.getElementById("tempHint").textContent = tempText(d.temperatureC);
       document.getElementById("humHint").textContent = humidityText(d.humidityPct);
       document.getElementById("pressureHint").textContent = pressureTrend();
-      document.getElementById("comfort").textContent = comfortScore(d);
       document.getElementById("updated").textContent = d.timeText || "--:--";
-      const isAlert = danger(d);
+      updateTodayRangeDisplay();
       document.getElementById("temp").classList.toggle("alert", d.temperatureC > 30 || d.temperatureC < 5);
       document.getElementById("hum").classList.toggle("alert", d.humidityPct > 70 || d.humidityPct < 30);
       document.getElementById("pressure").classList.toggle("alert", d.pressureHpa > 1035 || d.pressureHpa < 980);
       document.getElementById("tempHint").classList.toggle("alert", d.temperatureC > 30 || d.temperatureC < 5);
       document.getElementById("humHint").classList.toggle("alert", d.humidityPct > 70 || d.humidityPct < 30);
-      document.getElementById("comfort").classList.toggle("alert", isAlert);
     }
 
     function startSync() {
