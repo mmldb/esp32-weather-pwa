@@ -115,15 +115,9 @@
     </section>
   </div>
 
-  <script>
-    const firebaseConfig = {
-      apiKey: "FIREBASE_WEB_API_KEY",
-      databaseURL: "https://PROJECT_ID-default-rtdb.europe-west1.firebasedatabase.app",
-      projectId: "PROJECT_ID",
-      appId: "APP_ID"
-    };
+  <script type="module">
+    import { firebaseConfig, deviceId } from "./firebase-config.js";
 
-    const deviceId = "esp32-bme280-01";
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     const latestRef = db.ref("devices/" + deviceId + "/latest");
@@ -220,6 +214,7 @@
       updateChart();
     }
 
+    window.setMode = setMode;
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
     startSync();
     updateChart();
