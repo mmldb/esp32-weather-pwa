@@ -40,12 +40,16 @@
     .main-num { font-size: clamp(4.8rem, 22vw, 7.2rem); line-height: 0.9; font-weight: 300; font-variant-numeric: tabular-nums; }
     .main-num.alert { color: var(--red); }
     .main-unit { font-size: 1.8rem; color: var(--muted); }
+    .hint { color: var(--muted); margin-top: 8px; font-size: 0.9rem; }
+    .hint.alert { color: var(--red); }
 
     .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .stat { border-top: 1px solid var(--border); padding-top: 12px; }
     .stat-val { font-size: 2.1rem; font-weight: 300; font-variant-numeric: tabular-nums; }
     .stat-val.alert { color: var(--red); }
     .unit { font-size: 1rem; color: var(--muted); margin-left: 4px; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .meta .stat-val { font-size: 1.35rem; }
 
     .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
     .tab-btn {
@@ -58,10 +62,12 @@
       cursor: pointer;
     }
     .tab-btn.active { color: var(--text); border-color: var(--border); }
+    .range-tabs .tab-btn { padding: 7px; font-size: 0.82rem; }
     .chart-wrap { height: 280px; }
 
     @media (max-width: 420px) {
       .stats { grid-template-columns: 1fr; }
+      .meta { grid-template-columns: 1fr 1fr; }
       .main-unit { font-size: 1.35rem; }
     }
   </style>
@@ -72,18 +78,32 @@
       <div class="label">homerseklet</div>
       <div class="main-row">
         <div id="temp" class="main-num">--.-</div>
-        <div class="main-unit">°C</div>
+        <div class="main-unit">&deg;C</div>
       </div>
+      <div id="tempHint" class="hint">--</div>
     </section>
 
     <section class="card stats">
       <div class="stat">
         <div class="label">paratartalom</div>
         <div><span id="hum" class="stat-val">--</span><span class="unit">%</span></div>
+        <div id="humHint" class="hint">--</div>
       </div>
       <div class="stat">
         <div class="label">legnyomas</div>
         <div><span id="pressure" class="stat-val">----</span><span class="unit">hPa</span></div>
+        <div id="pressureHint" class="hint">--</div>
+      </div>
+    </section>
+
+    <section class="card meta">
+      <div class="stat">
+        <div class="label">komfort</div>
+        <div><span id="comfort" class="stat-val">--</span><span class="unit">/100</span></div>
+      </div>
+      <div class="stat">
+        <div class="label">frissitve</div>
+        <div id="updated" class="stat-val">--:--</div>
       </div>
     </section>
 
@@ -92,6 +112,11 @@
         <button class="tab-btn active" onclick="setMode(event, 'temperatureC')">temp</button>
         <button class="tab-btn" onclick="setMode(event, 'humidityPct')">para</button>
         <button class="tab-btn" onclick="setMode(event, 'pressureHpa')">nyomas</button>
+      </div>
+      <div class="tabs range-tabs">
+        <button class="tab-btn active" onclick="setRange(event, '1h')">1h</button>
+        <button class="tab-btn" onclick="setRange(event, '24h')">24h</button>
+        <button class="tab-btn" onclick="setRange(event, '7d')">7d</button>
       </div>
       <div class="chart-wrap"><canvas id="chart"></canvas></div>
     </section>
@@ -106,6 +131,7 @@
     const historyRef = db.ref("devices/" + deviceId + "/history");
     const storageKey = "weather-history-" + deviceId;
     let mode = "temperatureC";
+    let range = "1h";
     let history = JSON.parse(localStorage.getItem(storageKey) || "[]");
 
     const chart = new Chart(document.getElementById("chart").getContext("2d"), {
@@ -136,8 +162,36 @@
       return d.temperatureC > 30 || d.temperatureC < 5 || d.humidityPct > 70 || d.humidityPct < 30 || d.pressureHpa > 1035 || d.pressureHpa < 980;
     }
 
+    function tempText(t) {
+      if (t > 30) return "tul meleg";
+      if (t >= 25) return "meleg";
+      if (t >= 20 && t <= 24) return "idealis";
+      if (t < 18) return "huvos";
+      return "rendben";
+    }
+
+    function humidityText(h) {
+      if (h < 30) return "szaraz";
+      if (h < 40) return "kisse szaraz";
+      if (h <= 60) return "rendben";
+      if (h > 70) return "tul paras";
+      return "magas";
+    }
+
+    function comfortScore(d) {
+      let score = 100;
+      score -= Math.min(45, Math.abs(d.temperatureC - 22) * 6);
+      score -= Math.min(35, Math.abs(d.humidityPct - 50) * 2);
+      return Math.max(0, Math.round(score));
+    }
+
     function num(v, n) {
       return typeof v === "number" ? v.toFixed(n) : "--";
+    }
+
+    function normalizedTs(value) {
+      if (typeof value !== "number" || value <= 0) return null;
+      return value > 1000000000000 ? value : value * 1000;
     }
 
     function savePoint(d) {
@@ -146,14 +200,14 @@
         humidityPct: d.humidityPct,
         pressureHpa: d.pressureHpa,
         timeText: d.timeText || new Date().toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" }),
-        ts: validTimestamp(d.ts) || d.uptimeMs || Date.now()
+        ts: normalizedTs(d.ts) || d.uptimeMs || Date.now()
       };
 
       const last = history[history.length - 1];
       if (last && last.timeText === point.timeText) history[history.length - 1] = point;
       else history.push(point);
 
-      history = history.slice(-120);
+      history = history.slice(-10080);
       localStorage.setItem(storageKey, JSON.stringify(history));
     }
 
@@ -166,14 +220,14 @@
 
       history = Object.values(data)
         .filter(p => typeof p.temperatureC === "number")
-        .sort((a, b) => (validTimestamp(a.ts) || a.uptimeMs || 0) - (validTimestamp(b.ts) || b.uptimeMs || 0))
-        .slice(-120)
+        .sort((a, b) => (normalizedTs(a.ts) || a.uptimeMs || 0) - (normalizedTs(b.ts) || b.uptimeMs || 0))
+        .slice(-10080)
         .map(p => ({
           temperatureC: p.temperatureC,
           humidityPct: p.humidityPct,
           pressureHpa: p.pressureHpa,
           timeText: p.timeText || "xx:xx",
-          ts: validTimestamp(p.ts) || p.uptimeMs || 0
+          ts: normalizedTs(p.ts) || p.uptimeMs || 0
         }));
 
       localStorage.setItem(storageKey, JSON.stringify(history));
@@ -181,44 +235,78 @@
     }
 
     function updateChart() {
-      const points = history.filter(p => typeof p[mode] === "number");
+      const windowMs = range === "1h" ? 3600000 : range === "24h" ? 86400000 : 604800000;
+      const cutoff = Date.now() - windowMs;
+      let points = history.filter(p => typeof p[mode] === "number" && (!p.ts || p.ts < 1000000000000 || p.ts >= cutoff));
+      if (points.length < 2) points = history.filter(p => typeof p[mode] === "number").slice(-120);
       chart.data.labels = points.map(p => p.timeText);
       chart.data.datasets[0].data = points.map(p => p[mode]);
       chart.update("none");
+    }
+
+    function pressureTrend() {
+      const points = history.filter(p => typeof p.pressureHpa === "number");
+      if (points.length < 2) return "trend: --";
+
+      const first = points[Math.max(0, points.length - 30)];
+      const last = points[points.length - 1];
+      const diff = last.pressureHpa - first.pressureHpa;
+
+      if (diff <= -2) return "gyorsan csokken";
+      if (diff < -0.5) return "csokken";
+      if (diff >= 2) return "gyorsan emelkedik";
+      if (diff > 0.5) return "emelkedik";
+      return "stabil";
     }
 
     function render(d) {
       document.getElementById("temp").textContent = num(d.temperatureC, 1);
       document.getElementById("hum").textContent = num(d.humidityPct, 0).padStart(2, "0");
       document.getElementById("pressure").textContent = num(d.pressureHpa, 0);
+      document.getElementById("tempHint").textContent = tempText(d.temperatureC);
+      document.getElementById("humHint").textContent = humidityText(d.humidityPct);
+      document.getElementById("pressureHint").textContent = pressureTrend();
+      document.getElementById("comfort").textContent = comfortScore(d);
+      document.getElementById("updated").textContent = d.timeText || "--:--";
       const isAlert = danger(d);
       document.getElementById("temp").classList.toggle("alert", d.temperatureC > 30 || d.temperatureC < 5);
       document.getElementById("hum").classList.toggle("alert", d.humidityPct > 70 || d.humidityPct < 30);
       document.getElementById("pressure").classList.toggle("alert", d.pressureHpa > 1035 || d.pressureHpa < 980);
+      document.getElementById("tempHint").classList.toggle("alert", d.temperatureC > 30 || d.temperatureC < 5);
+      document.getElementById("humHint").classList.toggle("alert", d.humidityPct > 70 || d.humidityPct < 30);
+      document.getElementById("comfort").classList.toggle("alert", isAlert);
     }
 
     function startSync() {
-      historyRef.limitToLast(120).on("value", (s) => {
+      historyRef.limitToLast(10080).on("value", (s) => {
         loadFirebaseHistory(s.val());
       });
 
       latestRef.on("value", (s) => {
         const d = s.val();
         if (!d) return;
-        render(d);
         savePoint(d);
+        render(d);
         updateChart();
       });
     }
 
     function setMode(evt, nextMode) {
       mode = nextMode;
-      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      evt.currentTarget.parentElement.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      evt.currentTarget.classList.add("active");
+      updateChart();
+    }
+
+    function setRange(evt, nextRange) {
+      range = nextRange;
+      evt.currentTarget.parentElement.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
       evt.currentTarget.classList.add("active");
       updateChart();
     }
 
     window.setMode = setMode;
+    window.setRange = setRange;
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
     startSync();
     updateChart();
