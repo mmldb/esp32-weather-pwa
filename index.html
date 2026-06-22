@@ -242,9 +242,46 @@
       const cutoff = Date.now() - windowMs;
       let points = history.filter(p => typeof p[mode] === "number" && (!p.ts || p.ts < 1000000000000 || p.ts >= cutoff));
       if (points.length < 2) points = history.filter(p => typeof p[mode] === "number").slice(-120);
+
+      if (range === "24h") points = averagePoints(points, 30 * 60 * 1000);
+      if (range === "7d") points = averagePoints(points, 3 * 60 * 60 * 1000);
+
       chart.data.labels = points.map(p => p.timeText);
       chart.data.datasets[0].data = points.map(p => p[mode]);
       chart.update("none");
+    }
+
+    function averagePoints(points, bucketMs) {
+      const realTimePoints = points.filter(p => p.ts && p.ts >= 1000000000000);
+      if (realTimePoints.length < 2) return points;
+
+      const buckets = {};
+      realTimePoints.forEach(p => {
+        const key = Math.floor(p.ts / bucketMs) * bucketMs;
+        if (!buckets[key]) buckets[key] = { sum: 0, count: 0, ts: key };
+        buckets[key].sum += p[mode];
+        buckets[key].count += 1;
+      });
+
+      return Object.values(buckets)
+        .sort((a, b) => a.ts - b.ts)
+        .map(b => ({
+          [mode]: b.sum / b.count,
+          timeText: formatBucketTime(b.ts),
+          ts: b.ts
+        }));
+    }
+
+    function formatBucketTime(ts) {
+      const date = new Date(ts);
+      if (range === "7d") {
+        return String(date.getMonth() + 1).padStart(2, "0") + "." +
+          String(date.getDate()).padStart(2, "0") + " " +
+          String(date.getHours()).padStart(2, "0") + ":00";
+      }
+
+      return String(date.getHours()).padStart(2, "0") + ":" +
+        String(date.getMinutes()).padStart(2, "0");
     }
 
     function pressureTrend() {
