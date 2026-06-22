@@ -146,7 +146,7 @@
         humidityPct: d.humidityPct,
         pressureHpa: d.pressureHpa,
         timeText: d.timeText || new Date().toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" }),
-        ts: Date.now()
+        ts: validTimestamp(d.ts) || d.uptimeMs || Date.now()
       };
 
       const last = history[history.length - 1];
@@ -157,19 +157,23 @@
       localStorage.setItem(storageKey, JSON.stringify(history));
     }
 
+    function validTimestamp(value) {
+      return typeof value === "number" && value > 0 ? value : null;
+    }
+
     function loadFirebaseHistory(data) {
       if (!data) return;
 
       history = Object.values(data)
         .filter(p => typeof p.temperatureC === "number")
-        .sort((a, b) => (a.ts || a.uptimeMs || 0) - (b.ts || b.uptimeMs || 0))
+        .sort((a, b) => (validTimestamp(a.ts) || a.uptimeMs || 0) - (validTimestamp(b.ts) || b.uptimeMs || 0))
         .slice(-120)
         .map(p => ({
           temperatureC: p.temperatureC,
           humidityPct: p.humidityPct,
           pressureHpa: p.pressureHpa,
           timeText: p.timeText || "xx:xx",
-          ts: p.ts || p.uptimeMs || 0
+          ts: validTimestamp(p.ts) || p.uptimeMs || 0
         }));
 
       localStorage.setItem(storageKey, JSON.stringify(history));
