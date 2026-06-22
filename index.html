@@ -1,61 +1,228 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="hu">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#000000">
-    <title>ESP32 Weather</title>
-    <link rel="manifest" href="./manifest.webmanifest">
-    <link rel="stylesheet" href="./styles.css">
-  </head>
-  <body>
-    <main class="shell">
-      <header class="topbar" aria-label="Status">
-        <div>
-          <p class="label">ESP32 / BME280</p>
-          <h1>weather terminal</h1>
-        </div>
-        <div class="status" id="status">offline</div>
-      </header>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>ESP32 Weather</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#000000" />
 
-      <section class="hero" aria-label="Current temperature">
-        <div class="scanlines" aria-hidden="true"></div>
-        <p class="label">last sample</p>
-        <div class="hero-row">
-          <div class="big-value" id="temperature">--.--</div>
-          <div class="big-unit">deg C</div>
-        </div>
-        <p class="timestamp" id="timestamp">xx:xx - adatok</p>
-      </section>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-      <section class="metrics" aria-label="Current measurements">
-        <article class="metric" id="humidityCard">
-          <p class="label">humidity</p>
-          <p><span id="humidity">--</span><span class="unit">%</span></p>
-        </article>
-        <article class="metric" id="pressureCard">
-          <p class="label">pressure</p>
-          <p><span id="pressure">----.--</span><span class="unit">hPa</span></p>
-        </article>
-        <article class="metric">
-          <p class="label">device</p>
-          <p class="small" id="device">esp32-bme280-01</p>
-        </article>
-      </section>
+  <style>
+    :root {
+      --bg: #000;
+      --card: #050505;
+      --border: #f2f2f2;
+      --line: #303030;
+      --text: #f2f2f2;
+      --muted: #8f8f8f;
+      --red: #ff3333;
+    }
 
-      <section class="chart-panel" aria-label="History chart">
-        <div class="chart-head">
-          <p class="label">line</p>
-          <div class="segmented" aria-label="Chart metric">
-            <button class="active" data-series="temperatureC">temp</button>
-            <button data-series="humidityPct">hum</button>
-            <button data-series="pressureHpa">press</button>
-          </div>
-        </div>
-        <canvas id="chart" width="900" height="420"></canvas>
-      </section>
-    </main>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 18px 14px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Cascadia Mono", Consolas, monospace;
+      -webkit-tap-highlight-color: transparent;
+    }
 
-    <script type="module" src="./app.js"></script>
-  </body>
+    .container { max-width: 560px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; border-bottom: 2px solid var(--border); padding-bottom: 14px; }
+    h1 { margin: 0; font-size: 1.4rem; font-weight: 400; text-transform: uppercase; }
+    .status { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; }
+    .status.alert { color: var(--red); }
+
+    .card { background: var(--card); border: 1px solid var(--line); padding: 18px; margin-bottom: 16px; }
+    .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; margin-bottom: 8px; }
+    .scanlines {
+      height: 54px;
+      margin-bottom: 18px;
+      background: repeating-linear-gradient(to bottom, transparent 0, transparent 10px, var(--text) 11px, var(--text) 13px);
+    }
+
+    .main-row { display: flex; align-items: baseline; gap: 10px; }
+    .main-num { font-size: clamp(4.8rem, 22vw, 7.2rem); line-height: 0.9; font-weight: 300; font-variant-numeric: tabular-nums; }
+    .main-num.alert { color: var(--red); }
+    .main-unit { font-size: 1.8rem; color: var(--muted); }
+    .time { color: var(--muted); margin-top: 14px; font-size: 1rem; }
+
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stat { border-top: 1px solid var(--border); padding-top: 12px; }
+    .stat-val { font-size: 2.1rem; font-weight: 300; font-variant-numeric: tabular-nums; }
+    .stat-val.alert { color: var(--red); }
+    .unit { font-size: 1rem; color: var(--muted); margin-left: 4px; }
+
+    .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .tab-btn {
+      flex: 1;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      padding: 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .tab-btn.active { color: var(--text); border-color: var(--border); }
+    .chart-wrap { height: 280px; }
+
+    @media (max-width: 420px) {
+      .stats { grid-template-columns: 1fr; }
+      .main-unit { font-size: 1.35rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>weather terminal</h1>
+      <span id="status" class="status">kapcsolodas...</span>
+    </header>
+
+    <section class="card">
+      <div class="scanlines"></div>
+      <div class="label">homerseklet</div>
+      <div class="main-row">
+        <div id="temp" class="main-num">--.-</div>
+        <div class="main-unit">°C</div>
+      </div>
+      <div id="time" class="time">xx:xx - adatok</div>
+    </section>
+
+    <section class="card stats">
+      <div class="stat">
+        <div class="label">paratartalom</div>
+        <div><span id="hum" class="stat-val">--</span><span class="unit">%</span></div>
+      </div>
+      <div class="stat">
+        <div class="label">legnyomas</div>
+        <div><span id="pressure" class="stat-val">----</span><span class="unit">hPa</span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="setMode(event, 'temperatureC')">temp</button>
+        <button class="tab-btn" onclick="setMode(event, 'humidityPct')">para</button>
+        <button class="tab-btn" onclick="setMode(event, 'pressureHpa')">nyomas</button>
+      </div>
+      <div class="chart-wrap"><canvas id="chart"></canvas></div>
+    </section>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "FIREBASE_WEB_API_KEY",
+      databaseURL: "https://PROJECT_ID-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "PROJECT_ID",
+      appId: "APP_ID"
+    };
+
+    const deviceId = "esp32-bme280-01";
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const latestRef = db.ref("devices/" + deviceId + "/latest");
+    const storageKey = "weather-history-" + deviceId;
+    let mode = "temperatureC";
+    let history = JSON.parse(localStorage.getItem(storageKey) || "[]");
+
+    const chart = new Chart(document.getElementById("chart").getContext("2d"), {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [{
+          data: [],
+          borderColor: "#f2f2f2",
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: 0.25,
+          fill: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: "#8f8f8f", maxTicksLimit: 5 } },
+          y: { grid: { color: "#303030" }, ticks: { color: "#8f8f8f" } }
+        }
+      }
+    });
+
+    function danger(d) {
+      return d.temperatureC > 30 || d.temperatureC < 5 || d.humidityPct > 70 || d.humidityPct < 30 || d.pressureHpa > 1035 || d.pressureHpa < 980;
+    }
+
+    function num(v, n) {
+      return typeof v === "number" ? v.toFixed(n) : "--";
+    }
+
+    function savePoint(d) {
+      const point = {
+        temperatureC: d.temperatureC,
+        humidityPct: d.humidityPct,
+        pressureHpa: d.pressureHpa,
+        timeText: d.timeText || new Date().toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" }),
+        ts: Date.now()
+      };
+
+      const last = history[history.length - 1];
+      if (last && last.timeText === point.timeText) history[history.length - 1] = point;
+      else history.push(point);
+
+      history = history.slice(-120);
+      localStorage.setItem(storageKey, JSON.stringify(history));
+    }
+
+    function updateChart() {
+      const points = history.filter(p => typeof p[mode] === "number");
+      chart.data.labels = points.map(p => p.timeText);
+      chart.data.datasets[0].data = points.map(p => p[mode]);
+      chart.update("none");
+    }
+
+    function render(d) {
+      document.getElementById("temp").textContent = num(d.temperatureC, 1);
+      document.getElementById("hum").textContent = num(d.humidityPct, 0).padStart(2, "0");
+      document.getElementById("pressure").textContent = num(d.pressureHpa, 0);
+      document.getElementById("time").textContent = (d.timeText || "xx:xx") + " - adatok";
+
+      const isAlert = danger(d);
+      document.getElementById("status").textContent = isAlert ? "alert" : "online";
+      document.getElementById("status").classList.toggle("alert", isAlert);
+      document.getElementById("temp").classList.toggle("alert", d.temperatureC > 30 || d.temperatureC < 5);
+      document.getElementById("hum").classList.toggle("alert", d.humidityPct > 70 || d.humidityPct < 30);
+      document.getElementById("pressure").classList.toggle("alert", d.pressureHpa > 1035 || d.pressureHpa < 980);
+    }
+
+    function startSync() {
+      latestRef.on("value", (s) => {
+        const d = s.val();
+        if (!d) return;
+        render(d);
+        savePoint(d);
+        updateChart();
+      }, () => {
+        document.getElementById("status").textContent = "offline";
+      });
+    }
+
+    function setMode(evt, nextMode) {
+      mode = nextMode;
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      evt.currentTarget.classList.add("active");
+      updateChart();
+    }
+
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+    startSync();
+    updateChart();
+  </script>
+</body>
 </html>
