@@ -103,6 +103,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     const latestRef = db.ref("devices/" + deviceId + "/latest");
+    const historyRef = db.ref("devices/" + deviceId + "/history");
     const storageKey = "weather-history-" + deviceId;
     let mode = "temperatureC";
     let history = JSON.parse(localStorage.getItem(storageKey) || "[]");
@@ -156,6 +157,25 @@
       localStorage.setItem(storageKey, JSON.stringify(history));
     }
 
+    function loadFirebaseHistory(data) {
+      if (!data) return;
+
+      history = Object.values(data)
+        .filter(p => typeof p.temperatureC === "number")
+        .sort((a, b) => (a.ts || a.uptimeMs || 0) - (b.ts || b.uptimeMs || 0))
+        .slice(-120)
+        .map(p => ({
+          temperatureC: p.temperatureC,
+          humidityPct: p.humidityPct,
+          pressureHpa: p.pressureHpa,
+          timeText: p.timeText || "xx:xx",
+          ts: p.ts || p.uptimeMs || 0
+        }));
+
+      localStorage.setItem(storageKey, JSON.stringify(history));
+      updateChart();
+    }
+
     function updateChart() {
       const points = history.filter(p => typeof p[mode] === "number");
       chart.data.labels = points.map(p => p.timeText);
@@ -174,6 +194,10 @@
     }
 
     function startSync() {
+      historyRef.limitToLast(120).on("value", (s) => {
+        loadFirebaseHistory(s.val());
+      });
+
       latestRef.on("value", (s) => {
         const d = s.val();
         if (!d) return;
